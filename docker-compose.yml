@@ -1,0 +1,157 @@
+services:
+  # Redis消息队列
+  redis:
+    image: redis:7-alpine
+    container_name: video_agent_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Web服务（FastAPI）
+  web:
+    build: .
+    container_name: video_agent_web
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
+      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: uvicorn main:app --host 0.0.0.0 --port 8000
+
+  # Celery Worker（下载队列）
+  celery_worker_download:
+    build: .
+    container_name: video_agent_worker_download
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
+      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+    depends_on:
+      redis:
+        condition: service_healthy
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app worker --loglevel=info -Q download -n worker_download@%h
+    healthcheck:
+      test: ["CMD", "celery", "-A", "tasks.celery_app", "inspect", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # Celery Worker（分析队列）
+  celery_worker_analysis:
+    build: .
+    container_name: video_agent_worker_analysis
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
+      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+    depends_on:
+      - redis
+      - web
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app worker --loglevel=info -Q analysis -n worker_analysis@%h
+
+  # Celery Worker（生成队列）
+  celery_worker_generation:
+    build: .
+    container_name: video_agent_worker_generation
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
+      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+    depends_on:
+      - redis
+      - web
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app worker --loglevel=info -Q generation -n worker_generation@%h
+
+  # Celery Worker（剪辑队列）
+  celery_worker_editing:
+    build: .
+    container_name: video_agent_worker_editing
+    volumes:
+      - ./storage:/app/storage
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - DASHSCOPE_API_KEY=${DASHSCOPE_API_KEY}
+      - TENCENT_SECRET_ID=${TENCENT_SECRET_ID}
+      - TENCENT_SECRET_KEY=${TENCENT_SECRET_KEY}
+      - KLING_ACCESS_KEY=${KLING_ACCESS_KEY}
+    depends_on:
+      - redis
+      - web
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app worker --loglevel=info -Q editing -n worker_editing@%h
+
+  # Flower监控面板（可选）
+  flower:
+    build: .
+    container_name: video_agent_flower
+    ports:
+      - "5555:5555"
+    environment:
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+    depends_on:
+      - redis
+    networks:
+      - video_agent_network
+    restart: unless-stopped
+    command: celery -A tasks.celery_app flower --port=5555 --basic_auth=admin:flower123
+    profiles:
+      - monitoring
+
+volumes:
+  redis_data:
+    driver: local
+
+networks:
+  video_agent_network:
+    driver: bridge

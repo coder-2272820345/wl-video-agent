@@ -1,0 +1,66 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+env/
+.venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Environment variables
+.env
+
+# Storage files (媒体文件不需要打包到镜像)
+storage/
+
+# Logs
+*.log
+logs/
+
+# Celery
+celerybeat-schedule
+celerybeat.db
+
+# Temporary files
+*.tmp
+temp/
+tmp/
+
+# Git
+.git/
+.gitignore
+
+# Documentation (文档不需要在容器中)
+*.md
+DOCKER_*.md
+scripts/md/QUICKSTART.md
+scripts/md/LOCAL_SETUP.md
+scripts/md/MODULES.md
+scripts/md/PROJECT_SUMMARY.md
+
+# Scripts (启动脚本不需要在容器中)
+*.ps1
+*.sh
+*.bat
+restructure.py
+
+# Docker
+Dockerfile
+docker-compose.yml
+.dockerignore

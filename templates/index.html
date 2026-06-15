@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI视频创作Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px;
+            text-align: center;
+        }
+
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .content {
+            padding: 40px;
+        }
+
+        .form-section {
+            margin-bottom: 30px;
+        }
+
+        .form-section h2 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            color: #333;
+            font-weight: bold;
+        }
+
+        input[type="text"],
+        input[type="url"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input[type="text"]:focus,
+        input[type="url"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 20px;
+        }
+
+        .radio-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px 40px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s, box-shadow 0.2s;
+            font-weight: bold;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn:active {
+            transform: translateY(0);
+        }
+
+        .progress-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 30px;
+            background: #e0e0e0;
+            border-radius: 15px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.5s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: bold;
+        }
+
+        .status-log {
+            background: #2d2d2d;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Courier New', monospace;
+            font-size: 13px;
+            max-height: 300px;
+            overflow-y: auto;
+            margin-top: 15px;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #e8f5e9;
+            border-radius: 10px;
+            display: none;
+        }
+
+        .video-preview {
+            width: 100%;
+            max-width: 600px;
+            margin: 20px auto;
+            border-radius: 10px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+        }
+
+        .error-message {
+            background: #ffebee;
+            color: #c62828;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            display: none;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+            margin-left: 10px;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196f3;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-radius: 4px;
+        }
+
+        .info-box h3 {
+            color: #1976d2;
+            margin-bottom: 10px;
+        }
+
+        .info-box ul {
+            margin-left: 20px;
+        }
+
+        .info-box li {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎬 AI视频创作Agent</h1>
+            <p>自动化视频创作全流程：下载 → 分析 → 生成 → 剪辑</p>
+        </div>
+
+        <div class="content">
+            <div class="info-box">
+                <h3>使用说明</h3>
+                <ul>
+                    <li>输入参考视频URL，系统将分析其解说风格</li>
+                    <li>输入新主题，AI将生成符合风格的口播文案</li>
+                    <li>选择视频类型（口播/短剧），自动生成完整视频</li>
+                </ul>
+            </div>
+
+            <form id="videoForm">
+                <div class="form-section">
+                    <h2>📹 参考视频</h2>
+                    <div class="form-group">
+                        <label for="videoUrl">视频URL：</label>
+                        <input type="url" id="videoUrl" name="videoUrl" 
+                               placeholder="https://www.youtube.com/watch?v=example" required>
+                        <small style="color: #666;">支持YouTube、抖音、B站等平台</small>
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>✍️ 创作内容</h2>
+                    <div class="form-group">
+                        <label for="topic">视频主题：</label>
+                        <input type="text" id="topic" name="topic" 
+                               placeholder="例如：人工智能的发展历程" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="characterDesc">角色描述：</label>
+                        <textarea id="characterDesc" name="characterDesc" 
+                                  placeholder="例如：年轻女性，职业装，知性优雅，微笑亲切"></textarea>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="duration">视频时长（秒）：</label>
+                        <input type="text" id="duration" name="duration" value="60">
+                    </div>
+                </div>
+
+                <div class="form-section">
+                    <h2>🎨 视频设置</h2>
+                    <div class="form-group">
+                        <label>视频类型：</label>
+                        <div class="radio-group">
+                            <div class="radio-item">
+                                <input type="radio" id="type_talking" name="videoType" value="talking" checked>
+                                <label for="type_talking" style="margin: 0;">口播视频</label>
+                            </div>
+                            <div class="radio-item">
+                                <input type="radio" id="type_drama" name="videoType" value="drama">
+                                <label for="type_drama" style="margin: 0;">短剧视频</label>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="voice">语音类型：</label>
+                        <select id="voice" name="voice">
+                            <option value="zh-CN-XiaoxiaoNeural">晓晓（女声）</option>
+                            <option value="zh-CN-YunxiNeural">云希（男声）</option>
+                            <option value="zh-CN-XiaoyiNeural">晓伊（女声）</option>
+                            <option value="zh-CN-YunjianNeural">云健（男声）</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="provider">视频生成引擎：</label>
+                        <select id="provider" name="provider">
+                            <option value="kling">可灵AI</option>
+                            <option value="tongyi">通义万相</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="submit" class="btn" id="submitBtn">
+                    🚀 开始生成视频
+                </button>
+            </form>
+
+            <div class="progress-section" id="progressSection">
+                <h2>⏳ 生成进度</h2>
+                <div class="progress-bar">
+                    <div class="progress-fill" id="progressFill">0%</div>
+                </div>
+                <div class="status-log" id="statusLog"></div>
+            </div>
+
+            <div class="error-message" id="errorMessage"></div>
+
+            <div class="result-section" id="resultSection">
+                <h2>✅ 视频生成完成！</h2>
+                <video controls class="video-preview" id="videoPreview">
+                    您的浏览器不支持视频播放
+                </video>
+                <div style="text-align: center; margin-top: 20px;">
+                    <a href="#" class="btn" id="downloadBtn" download>⬇️ 下载视频</a>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('videoForm');
+        const submitBtn = document.getElementById('submitBtn');
+        const progressSection = document.getElementById('progressSection');
+        const progressFill = document.getElementById('progressFill');
+        const statusLog = document.getElementById('statusLog');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultSection = document.getElementById('resultSection');
+        const videoPreview = document.getElementById('videoPreview');
+        const downloadBtn = document.getElementById('downloadBtn');
+
+        let taskId = null;
+        let checkInterval = null;
+
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            // 重置状态
+            errorMessage.style.display = 'none';
+            resultSection.style.display = 'none';
+            progressSection.style.display = 'block';
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '生成中<span class="loading"></span>';
+            
+            const formData = {
+                video_url: document.getElementById('videoUrl').value,
+                topic: document.getElementById('topic').value,
+                character_desc: document.getElementById('characterDesc').value,
+                duration: parseInt(document.getElementById('duration').value),
+                voice: document.getElementById('voice').value,
+                provider: document.getElementById('provider').value,
+                video_type: document.querySelector('input[name="videoType"]:checked').value
+            };
+
+            try {
+                addLog('提交任务...');
+                
+                // 调用API创建任务
+                const response = await fetch('/api/generate-video', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                taskId = data.task_id;
+                
+                addLog(`任务已创建: ${taskId}`);
+                updateProgress(10);
+                
+                // 开始轮询任务状态
+                checkInterval = setInterval(checkTaskStatus, 3000);
+                
+            } catch (error) {
+                showError(`任务提交失败: ${error.message}`);
+                resetForm();
+            }
+        });
+
+        async function checkTaskStatus() {
+            if (!taskId) return;
+
+            try {
+                const response = await fetch(`/task/${taskId}`);
+                const data = await response.json();
+
+                addLog(`状态: ${data.status}`);
+
+                if (data.status === 'SUCCESS') {
+                    clearInterval(checkInterval);
+                    updateProgress(100);
+                    showResult(data.result);
+                    resetForm();
+                } else if (data.status === 'FAILURE') {
+                    clearInterval(checkInterval);
+                    showError(`任务失败: ${data.error}`);
+                    resetForm();
+                } else if (data.status === 'RUNNING') {
+                    updateProgress(50);
+                }
+            } catch (error) {
+                console.error('检查任务状态失败:', error);
+            }
+        }
+
+        function updateProgress(percent) {
+            progressFill.style.width = percent + '%';
+            progressFill.textContent = percent + '%';
+        }
+
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            statusLog.innerHTML += `[${timestamp}] ${message}\n`;
+            statusLog.scrollTop = statusLog.scrollHeight;
+        }
+
+        function showResult(result) {
+            resultSection.style.display = 'block';
+            
+            if (result.final_video || result.video_url) {
+                const videoUrl = result.final_video || result.video_url;
+                videoPreview.src = videoUrl;
+                downloadBtn.href = videoUrl;
+            }
+            
+            addLog('✅ 视频生成完成！');
+        }
+
+        function showError(message) {
+            errorMessage.textContent = message;
+            errorMessage.style.display = 'block';
+            addLog(`❌ ${message}`);
+        }
+
+        function resetForm() {
+            submitBtn.disabled = false;
+            submitBtn.innerHTML = '🚀 开始生成视频';
+        }
+    </script>
+</body>
+</html>
