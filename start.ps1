@@ -1,106 +1,154 @@
-# AI视频创作Agent - PowerShell启动脚本
-# 使用方法: .\start.ps1
+# AI Video Agent - Unified Startup Script
+# Usage: .\scripts\startup\start.ps1 [mode]
+# Modes: docker, local, check
+
+param(
+    [string]$Mode = "docker"
+)
 
 Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  AI视频创作Agent - 快速启动" -ForegroundColor Cyan
+Write-Host "  AI Video Agent - Startup" -ForegroundColor Cyan
 Write-Host "======================================" -ForegroundColor Cyan
 Write-Host ""
 
-# 检查.env文件是否存在
-if (-Not (Test-Path ".env")) {
-    Write-Host "⚠️  警告: .env文件不存在" -ForegroundColor Yellow
-    Write-Host "📝 正在从.env.example创建.env文件..." -ForegroundColor Yellow
-    Copy-Item ".env.example" ".env"
-    Write-Host "✅ 已创建.env文件，请编辑该文件填入您的API Keys" -ForegroundColor Green
+if ($Mode -eq "check") {
+    # Just check status
+    Write-Host "Checking service status..." -ForegroundColor Yellow
+    try {
+        $services = docker-compose ps --format json 2>$null | ConvertFrom-Json
+        $allRunning = $true
+        
+        foreach ($service in $services) {
+            $status = if ($service.State -eq "running") { "[OK]" } else { "[STOPPED]" }
+            $color = if ($service.State -eq "running") { "Green" } else { "Red" }
+            Write-Host "   $status $($service.Service): $($service.State)" -ForegroundColor $color
+            
+            if ($service.State -ne "running") {
+                $allRunning = $false
+            }
+        }
+        
+        Write-Host ""
+        if ($allRunning) {
+            Write-Host "[SUCCESS] All services are running!" -ForegroundColor Green
+            Write-Host ""
+            Write-Host "Access:" -ForegroundColor Cyan
+            Write-Host "  Web UI:  http://localhost:8000" -ForegroundColor White
+            Write-Host "  API Docs: http://localhost:8000/docs" -ForegroundColor White
+        } else {
+            Write-Host "[INFO] Some services stopped. Run: .\scripts\startup\start.ps1 docker" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "[ERROR] Docker not available or services not started" -ForegroundColor Red
+        Write-Host "Run: .\scripts\startup\start.ps1 docker" -ForegroundColor Yellow
+    }
+    
+} elseif ($Mode -eq "local") {
+    # Local startup (no Docker)
+    Write-Host "Starting in LOCAL mode (no Docker)..." -ForegroundColor Yellow
     Write-Host ""
-    Read-Host "按回车键继续"
-}
-
-# 检查Docker是否安装
-try {
-    $dockerVersion = docker --version
-    Write-Host "✅ Docker已安装: $dockerVersion" -ForegroundColor Green
-} catch {
-    Write-Host "❌ 错误: Docker未安装" -ForegroundColor Red
-    Write-Host "请先安装Docker Desktop: https://www.docker.com/products/docker-desktop/" -ForegroundColor Yellow
-    exit 1
-}
-
-# 检查docker-compose是否安装
-try {
-    $composeVersion = docker-compose --version
-    Write-Host "✅ docker-compose已安装: $composeVersion" -ForegroundColor Green
-} catch {
-    Write-Host "❌ 错误: docker-compose未安装" -ForegroundColor Red
-    exit 1
-}
-
-Write-Host ""
-
-# 选择启动模式
-Write-Host "请选择启动模式:" -ForegroundColor Cyan
-Write-Host "1) 完整模式（Web + Redis + 4个Worker）" -ForegroundColor White
-Write-Host "2) 仅Web服务（需要本地运行Workers）" -ForegroundColor White
-Write-Host "3) 带监控模式（Web + Redis + Workers + Flower）" -ForegroundColor White
-Write-Host ""
-
-$choice = Read-Host "请输入选项 (1/2/3)"
-
-switch ($choice) {
-    "1" {
-        Write-Host ""
-        Write-Host "🚀 启动完整模式..." -ForegroundColor Green
-        docker-compose up -d
-    }
-    "2" {
-        Write-Host ""
-        Write-Host "🚀 仅启动Web服务和Redis..." -ForegroundColor Green
-        docker-compose up -d redis web
-        Write-Host ""
-        Write-Host "💡 提示: 请在本地运行Celery Workers:" -ForegroundColor Yellow
-        Write-Host "   celery -A tasks.celery_app worker --loglevel=info -Q download,analysis,generation,editing" -ForegroundColor Gray
-    }
-    "3" {
-        Write-Host ""
-        Write-Host "🚀 启动带监控模式..." -ForegroundColor Green
-        docker-compose --profile monitoring up -d
-    }
-    default {
-        Write-Host "❌ 无效选项" -ForegroundColor Red
+    
+    # Check Python
+    try {
+        python --version 2>&1 | Out-Null
+        Write-Host "[OK] Python installed" -ForegroundColor Green
+    } catch {
+        Write-Host "[ERROR] Python not found" -ForegroundColor Red
         exit 1
     }
+    
+    # Check Redis
+    Write-Host "Checking Redis..." -ForegroundColor Yellow
+    try {
+        $redisTest = redis-cli ping 2>&1
+        if ($redisTest -eq "PONG") {
+            Write-Host "[OK] Redis connected" -ForegroundColor Green
+        } else {
+            Write-Host "[ERROR] Redis not responding" -ForegroundColor Red
+            Write-Host "Please start Redis first" -ForegroundColor Yellow
+            exit 1
+        }
+    } catch {
+        Write-Host "[ERROR] Redis not available" -ForegroundColor Red
+        exit 1
+    }
+    
+    # Install dependencies
+    Write-Host ""
+    Write-Host "Installing dependencies..." -ForegroundColor Yellow
+    pip install -r requirements.txt
+    
+    # Start Celery workers
+    Write-Host ""
+    Write-Host "Starting Celery workers..." -ForegroundColor Yellow
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "celery -A tasks.celery_app worker --loglevel=info -Q download,analysis,generation,editing"
+    
+    # Start web server
+    Write-Host ""
+    Write-Host "Starting web server..." -ForegroundColor Yellow
+    Start-Process powershell -ArgumentList "-NoExit", "-Command", "uvicorn main:app --host 0.0.0.0 --port 8000"
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] Services started in separate windows!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Access: http://localhost:8000" -ForegroundColor Cyan
+    
+} else {
+    # Docker mode (default)
+    Write-Host "Starting in DOCKER mode..." -ForegroundColor Yellow
+    Write-Host ""
+    
+    # Check Docker
+    try {
+        docker --version 2>&1 | Out-Null
+        Write-Host "[OK] Docker available" -ForegroundColor Green
+    } catch {
+        Write-Host "[ERROR] Docker not found" -ForegroundColor Red
+        exit 1
+    }
+    
+    # Check if services are already running
+    Write-Host "Checking existing services..." -ForegroundColor Yellow
+    $running = docker-compose ps --format json 2>$null | ConvertFrom-Json | Where-Object { $_.State -eq "running" }
+    
+    if ($running.Count -gt 0) {
+        Write-Host "[INFO] Some services already running" -ForegroundColor Yellow
+        Write-Host "Stopping existing services..." -ForegroundColor Yellow
+        docker-compose down
+        Write-Host ""
+    }
+    
+    # Start services
+    Write-Host "Starting services..." -ForegroundColor Yellow
+    docker-compose up -d
+    
+    Write-Host ""
+    Write-Host "Waiting for services to initialize (30 seconds)..." -ForegroundColor Yellow
+    for ($i = 30; $i -gt 0; $i--) {
+        Write-Host "`r   Waiting... $i seconds remaining" -NoNewline
+        Start-Sleep -Seconds 1
+    }
+    Write-Host ""
+    
+    # Check status
+    Write-Host ""
+    Write-Host "Service Status:" -ForegroundColor Cyan
+    docker-compose ps
+    
+    # Show logs
+    Write-Host ""
+    Write-Host "Recent Logs:" -ForegroundColor Cyan
+    docker-compose logs --tail=20 web
+    
+    Write-Host ""
+    Write-Host "[SUCCESS] All services started!" -ForegroundColor Green
+    Write-Host ""
+    Write-Host "Access:" -ForegroundColor Cyan
+    Write-Host "  Web UI:  http://localhost:8000" -ForegroundColor White
+    Write-Host "  API Docs: http://localhost:8000/docs" -ForegroundColor White
+    Write-Host ""
+    Write-Host "Useful commands:" -ForegroundColor Cyan
+    Write-Host "  Check status: .\scripts\startup\start.ps1 check" -ForegroundColor Gray
+    Write-Host "  View logs: docker-compose logs -f" -ForegroundColor Gray
+    Write-Host "  Stop: docker-compose down" -ForegroundColor Gray
 }
-
-Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  服务启动中..." -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host ""
-
-# 等待服务启动
-Start-Sleep -Seconds 5
-
-# 检查服务状态
-Write-Host "📊 服务状态:" -ForegroundColor Cyan
-docker-compose ps
-
-Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  访问地址" -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "🌐 Web界面: http://localhost:8000" -ForegroundColor Green
-Write-Host "📚 API文档: http://localhost:8000/docs" -ForegroundColor Green
-
-if ($choice -eq "3") {
-    Write-Host "🌸 Flower监控: http://localhost:5555 (admin/flower123)" -ForegroundColor Green
-}
-
-Write-Host ""
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "  常用命令" -ForegroundColor Cyan
-Write-Host "======================================" -ForegroundColor Cyan
-Write-Host "查看日志: docker-compose logs -f" -ForegroundColor White
-Write-Host "停止服务: docker-compose down" -ForegroundColor White
-Write-Host "重启服务: docker-compose restart" -ForegroundColor White
-Write-Host ""
-Write-Host "🎉 启动完成！" -ForegroundColor Green
